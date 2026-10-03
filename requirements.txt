@@ -1,0 +1,8 @@
+faster-whisper
+pyannote.audio
+google-genai
+soundfile
+fastapi
+uvicorn
+python-multipart
+librosa
