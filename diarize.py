@@ -8,20 +8,21 @@ on the model pages for:
   - https://huggingface.co/pyannote/speaker-diarization-3.1
   - https://huggingface.co/pyannote/segmentation-3.0
 
-NOTE: audio is decoded manually via the ffmpeg command-line tool rather
-than letting pyannote/torchaudio use torchcodec. This avoids a common
-Windows issue where torchcodec can't locate its DLLs even when FFmpeg
-is correctly installed and on PATH.
+NOTE: audio is decoded with PyAV (the ffmpeg libraries that ship inside
+faster-whisper's own dependency) rather than letting pyannote/torchaudio use
+torchcodec. This avoids the Windows issue where torchcodec can't locate its
+DLLs, and means no separate ffmpeg install is needed.
+
+When the speech models are bundled with the desktop app (HF_HUB_OFFLINE=1),
+no Hugging Face token is needed at run time.
 """
 
 import json
 import os
-import subprocess
-import tempfile
-from dotenv import load_dotenv
-load_dotenv()
+
+import av
+import numpy as np
 import torch
-import soundfile as sf
 from pyannote.audio import Pipeline
 
 DIARIZED_DIR = "data/diarized"
@@ -30,32 +31,35 @@ DIARIZED_DIR = "data/diarized"
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 
-def load_waveform_via_ffmpeg(audio_path: str, target_sr: int = 16000):
+def load_waveform(audio_path: str, target_sr: int = 16000):
     """
-    Decodes any audio/video file into a mono, 16kHz waveform tensor using
-    the ffmpeg CLI directly (bypassing torchcodec entirely).
+    Decodes any audio/video file into a mono waveform tensor at target_sr.
     Returns (waveform, sample_rate) where waveform has shape (1, num_samples),
     which is the format pyannote expects.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_wav_path = tmp.name
 
+    Channels are resampled separately and then averaged. (PyAV's built-in mono
+    mix uses a different gain; averaging matches the ffmpeg CLI and pyannote's
+    own downmix.)
+    """
+    container = av.open(audio_path)
     try:
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", audio_path,
-                "-ac", "1", "-ar", str(target_sr),
-                tmp_wav_path,
-            ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        data, sr = sf.read(tmp_wav_path, dtype="float32")
-        waveform = torch.from_numpy(data).unsqueeze(0)  # shape (1, num_samples)
-        return waveform, sr
+        stream = container.streams.audio[0]
+        layout = "mono" if stream.channels == 1 else "stereo"
+        resampler = av.audio.resampler.AudioResampler(format="fltp", layout=layout, rate=target_sr)
+        chunks = []
+        for frame in container.decode(stream):
+            for out in resampler.resample(frame):
+                chunks.append(out.to_ndarray())  # shape (channels, n)
+        for out in resampler.resample(None):  # flush
+            chunks.append(out.to_ndarray())
     finally:
-        os.remove(tmp_wav_path)
+        container.close()
+
+    if not chunks:
+        raise ValueError(f"No audio could be read from {audio_path}")
+
+    mono = np.concatenate(chunks, axis=1).mean(axis=0).astype("float32")
+    return torch.from_numpy(mono).unsqueeze(0), target_sr
 
 
 def run_diarization(audio_path: str) -> list[dict]:
@@ -63,7 +67,8 @@ def run_diarization(audio_path: str) -> list[dict]:
     Returns speaker turn windows:
     [{"start": float, "end": float, "speaker": "SPEAKER_00"}, ...]
     """
-    if not HF_TOKEN:
+    offline = os.environ.get("HF_HUB_OFFLINE") == "1"
+    if not HF_TOKEN and not offline:
         raise RuntimeError(
             "HF_TOKEN environment variable not set. "
             "Get a token from huggingface.co/settings/tokens and "
@@ -75,7 +80,7 @@ def run_diarization(audio_path: str) -> list[dict]:
         token=HF_TOKEN,
     )
 
-    waveform, sample_rate = load_waveform_via_ffmpeg(audio_path)
+    waveform, sample_rate = load_waveform(audio_path)
     diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate})
 
     speaker_segments = []

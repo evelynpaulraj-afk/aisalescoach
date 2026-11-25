@@ -1,0 +1,28 @@
+SALES COACH - HOW TO USE
+========================
+
+SET UP (once)
+1. Extract the whole zip to a short folder path, for example C:\SalesCoach
+   (right-click the zip > Extract All). Do not run it from inside the zip, and
+   avoid deep folders: Windows can fail on very long file paths.
+2. Double-click SalesCoach.exe.
+   - Windows may say "Windows protected your PC" because the app is not
+     code-signed. Click "More info", then "Run anyway".
+   - A black window opens, then your web browser opens the app. The first start
+     can take a minute or two.
+3. The first time only, the black window asks for a Gemini API key. Get a free
+   one at https://aistudio.google.com/apikey, paste it and press Enter.
+
+USE
+4. In the browser, click "Process recording" and choose an audio or video file.
+5. Wait while it works. Processing can take several minutes per call. When it
+   finishes, the transcript and coaching report appear. "Save as PDF" exports it.
+6. To quit, close the black window.
+
+GOOD TO KNOW
+- Recordings and results are saved in the "data" folder next to SalesCoach.exe.
+- Audio is processed on this computer and never leaves it. Only the written
+  transcript is sent to Google's Gemini service for the analysis step, so an
+  internet connection is needed.
+- Windows 10 or 11 (64-bit). 8 GB of RAM or more is recommended.
+- If something goes wrong, the black window shows what happened.

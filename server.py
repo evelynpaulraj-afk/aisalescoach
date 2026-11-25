@@ -21,10 +21,12 @@ Run with:
 
 import os
 import shutil
+import sys
 import uuid
 
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from main import run_pipeline
 
@@ -65,12 +67,18 @@ async def process_call(background_tasks: BackgroundTasks, file: UploadFile = Fil
     background. Returns immediately with a job_id to poll.
     """
     os.makedirs(RAW_AUDIO_DIR, exist_ok=True)
-    save_path = os.path.join(RAW_AUDIO_DIR, file.filename)
+
+    # Each upload gets a unique file name. The pipeline caches results by file
+    # name, so without this a second, different recording called "call.mp3"
+    # would silently return the first one's cached report. basename() also
+    # stops a crafted file name from writing outside the uploads folder.
+    job_id = str(uuid.uuid4())
+    safe_name = os.path.basename(file.filename or "recording")
+    save_path = os.path.join(RAW_AUDIO_DIR, f"{job_id[:8]}_{safe_name}")
 
     with open(save_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    job_id = str(uuid.uuid4())
     JOBS[job_id] = {"status": "processing"}
     background_tasks.add_task(_run_job, job_id, save_path)
 
@@ -95,3 +103,16 @@ async def get_status(job_id: str):
 async def health():
     """Quick check the server is up: GET /health"""
     return {"status": "ok"}
+
+
+# --- Serve the built web UI (desktop app / single-server deployments) -------
+# The packaged app bundles the built React UI in a "ui" folder. If that folder
+# exists, serve it at "/" so one process provides both the page and the API.
+# This must stay at the bottom: routes defined above take priority over it.
+def _resource_dir() -> str:
+    return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+
+_UI_DIR = os.path.join(_resource_dir(), "ui")
+if os.path.isdir(_UI_DIR):
+    app.mount("/", StaticFiles(directory=_UI_DIR, html=True), name="ui")

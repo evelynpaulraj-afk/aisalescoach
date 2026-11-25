@@ -1,9 +1,14 @@
 import React, { useState, useRef } from "react";
 import { ChevronDown, ChevronUp, Upload, RotateCcw, Loader2, FileAudio, Printer } from "lucide-react";
 
-// When deployed, replace this with your live Render backend URL,
-// e.g. "https://sales-coach-api.onrender.com". Keep localhost for local dev.
-const API_URL = "http://localhost:8000";
+// Where the pipeline API lives:
+//  - `npm run dev`: the Python server on localhost:8000
+//  - packaged desktop app / single-server build: the same address the page was
+//    loaded from, so a relative URL ("") is correct
+//  - UI hosted separately from the API: set VITE_API_URL at build time,
+//    e.g. VITE_API_URL=https://sales-coach-api.onrender.com
+const API_URL =
+  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 
 const theme = {

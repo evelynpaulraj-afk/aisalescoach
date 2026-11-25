@@ -11,8 +11,12 @@ from faster_whisper import WhisperModel
 
 TRANSCRIPTS_DIR = "data/transcripts"
 
+# Whisper model size. Override with the WHISPER_MODEL environment variable
+# (e.g. "small" for better accuracy when the machine has the memory for it).
+DEFAULT_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 
-def transcribe_audio(audio_path: str, model_size: str = "base") -> list[dict]:
+
+def transcribe_audio(audio_path: str, model_size: str = DEFAULT_MODEL_SIZE) -> list[dict]:
     """
     Runs Whisper on audio_path and returns a list of segments:
     [{"start": float, "end": float, "text": str}, ...]
@@ -30,7 +34,7 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> list[dict]:
     return result
 
 
-def transcribe_and_cache(audio_path: str, model_size: str = "base") -> list[dict]:
+def transcribe_and_cache(audio_path: str, model_size: str = DEFAULT_MODEL_SIZE) -> list[dict]:
     """
     Transcribes audio_path, or loads a cached transcript if one already
     exists for this filename.
